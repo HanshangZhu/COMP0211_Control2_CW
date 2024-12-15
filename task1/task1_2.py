@@ -50,8 +50,8 @@ regulator = RegulatorModel(N_mpc, num_states, num_controls, num_states,constr_fl
 regulator.setSystemMatrices(dt,motor_model.getA(),motor_model.getB())
 # Define the cost matrices
 
-Qcoeff = [500,0.0]
-Rcoeff = [1]*num_controls
+Qcoeff = [107,0.0]
+Rcoeff = [0.01]*num_controls
 
 regulator.setCostMatrices(Qcoeff,Rcoeff)
 x_ref = np.array([10,0])
