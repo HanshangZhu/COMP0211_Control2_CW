@@ -117,3 +117,35 @@ plt.grid(True)
 
 plt.tight_layout()
 plt.show()
+
+# Compute the error dynamics
+error_omega = omega - hat_omega  # Error in angular velocity
+error_I_a = I_a - hat_I_a        # Error in armature current
+ 
+# Compute the eigenvalues of (A - LC)
+A_minus_LC = motor_model.A - observer.L @ motor_model.C
+eigenvalues = np.linalg.eigvals(A_minus_LC)
+print("Eigenvalues of (A - LC):", eigenvalues)
+ 
+# Plotting the error dynamics
+plt.figure(figsize=(12, 6))
+ 
+# Error in Angular Velocity
+plt.subplot(2, 1, 1)
+plt.plot(time, error_omega, label='$e_{\omega}(t)$ (Angular Velocity Error)')
+plt.title('Observer Error Dynamics')
+plt.xlabel('Time (s)')
+plt.ylabel('Error in Angular Velocity (rad/s)')
+plt.legend()
+plt.grid(True)
+ 
+# Error in Armature Current
+plt.subplot(2, 1, 2)
+plt.plot(time, error_I_a, label='$e_{I_a}(t)$ (Armature Current Error)')
+plt.xlabel('Time (s)')
+plt.ylabel('Error in Armature Current (A)')
+plt.legend()
+plt.grid(True)
+ 
+plt.tight_layout()
+plt.show()
