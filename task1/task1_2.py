@@ -14,7 +14,7 @@ R_a = 1.0     # Armature resistance (Ohm)
 L_a = 0.001   # Armature inductance (H)
 
 # Desired Eigenvalues for Observer
-lambda_1 = -20.0
+lambda_1 = -12
 lambda_2 = -10
 
 # Simulation Parameters
@@ -43,21 +43,19 @@ num_controls = 1
 constraints_flag = False
 
 # Horizon length
-N_mpc = 10
+N_mpc = 20
 # Initialize the regulator model
 regulator = RegulatorModel(N_mpc, num_states, num_controls, num_states,constr_flag=constraints_flag)
 # define system matrices
 regulator.setSystemMatrices(dt,motor_model.getA(),motor_model.getB())
 # Define the cost matrices
 
-Qcoeff = [1000.0,0.0]
-Rcoeff = [0.01]*num_controls
+Qcoeff = [500,0.0]
+Rcoeff = [1]*num_controls
 
 regulator.setCostMatrices(Qcoeff,Rcoeff)
-
-x_ref = np.array([-10,0])
+x_ref = np.array([10,0])
 regulator.propagation_model_regulator_fixed_std(x_ref)
-
 B_in = {'max': np.array([100000000000000] * num_controls), 'min': np.array([-1000000000000] * num_controls)}
 B_out = {'max': np.array([100000000,1000000000]), 'min': np.array([-100000000,-1000000000])}
 # creating constraints matrices
@@ -152,4 +150,3 @@ plt.show()
 
 
 
-        

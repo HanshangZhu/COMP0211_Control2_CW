@@ -1,0 +1,146 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from observer import Observer
+from dc_model import SysDyn
+from regulator_model import RegulatorModel
+from scipy.linalg import solve_discrete_are, inv
+ 
+# Nominal Motor Parameters
+J = 0.01
+b = 0.1
+K_t = 1
+K_e_nominal = 0.01  # Back EMF constant
+R_a_nominal = 1.0   # Armature resistance
+L_a_nominal = 0.001 # Armature inductance
+ 
+# Perturbation Range (±20%) with 11 data points
+perturbation_levels = np.linspace(-0.2, 0.2, 11)  # 11 points from -20% to +20%
+parameter_sets = [
+    {
+        "K_e": K_e_nominal * (1 + factor),
+        "R_a": R_a_nominal * (1 + factor),
+        "L_a": L_a_nominal * (1 + factor),
+    }
+    for factor in perturbation_levels
+]
+ 
+# Simulation Parameters
+t_start, t_end, dt = 0.0, 0.01, 0.00001
+time = np.arange(t_start, t_end, dt)
+num_steps = len(time)
+ 
+# Initialize results storage
+results = {"MPC": [], "LQR": []}
+ 
+# Loop through each parameter set
+for params in parameter_sets:
+    print(f"Testing with parameters: {params}")
+    K_e, R_a, L_a = params["K_e"], params["R_a"], params["L_a"]
+ 
+    # Initialize System
+    x_init = np.array([0.0, 0.0])
+    motor_model = SysDyn(J, b, K_t, K_e, R_a, L_a, dt, x_init)
+ 
+    # Observer
+    lambda_1, lambda_2 = -20, -10
+    observer = Observer(motor_model.A, motor_model.B, motor_model.C, dt, x_init)
+    observer.ComputeObserverGains(lambda_1, lambda_2)
+    
+    # MPC Controller Initialisation
+    num_states = 2
+    num_controls = 1
+    constraints_flag = False
+    N_mpc = 10
+    regulator = RegulatorModel(N_mpc, num_states, num_controls, num_states, constr_flag=constraints_flag)
+    regulator.setSystemMatrices(dt, motor_model.getA(), motor_model.getB())
+    regulator.checkStability()
+    regulator.checkControllabilityDiscrete()
+    Qcoeff = [107.0, 0.0]
+    Rcoeff = [0.01] * num_controls
+    regulator.setCostMatrices(Qcoeff, Rcoeff)
+    x_ref = np.array([10, 0])
+    regulator.propagation_model_regulator_fixed_std(x_ref)
+    B_in = {'max': np.array([1e12] * num_controls), 'min': np.array([-1e12] * num_controls)}
+    B_out = {'max': np.array([1e8, 1e9]), 'min': np.array([-1e8, -1e9])}
+    regulator.setConstraintsMatrices(B_in, B_out)
+    regulator.compute_H_and_F()
+ 
+    # LQR Controller
+    Q, R = regulator.getCostMatrices()
+    A = regulator.getDiscreteA()
+    B = regulator.getDiscreteB()
+    P = solve_discrete_are(A, B, Q, R)
+    K_lqr = inv(R + B.T @ P @ B) @ B.T @ P @ A
+    B_pinv = np.linalg.pinv(B)
+    delta_x = A @ x_ref
+    u_ff = -B_pinv @ delta_x
+ 
+    # Preallocate arrays for MPC and LQR results
+    omega_mpc = np.zeros(num_steps)
+    omega_lqr = np.zeros(num_steps)
+    x_cur_mpc = x_init.copy()
+    x_cur_lqr = x_init.copy()
+    x_hat_cur_mpc = x_init.copy()
+    x_hat_cur_lqr = x_init.copy()
+ 
+    for k in range(num_steps):
+        disturbance = 0.1 * np.sin(2 * np.pi * 5 * time[k])
+ 
+        # LQR Control
+        V_lqr = -K_lqr @ (x_cur_lqr - x_ref) + u_ff
+        y_cur_lqr = motor_model.step(V_lqr + disturbance)
+        x_cur_lqr = motor_model.getCurrentState()
+        x_hat_cur_lqr, _ = observer.update(V_lqr + disturbance, y_cur_lqr)
+        omega_lqr[k] = x_cur_lqr[0]
+ 
+        # MPC Control
+        u_mpc = regulator.compute_solution(x_hat_cur_mpc)
+        V_mpc = u_mpc[0]
+        y_cur_mpc = motor_model.step(V_mpc + disturbance)
+        x_cur_mpc = motor_model.getCurrentState()
+        x_hat_cur_mpc, _ = observer.update(V_mpc + disturbance, y_cur_mpc)
+        omega_mpc[k] = x_cur_mpc[0]
+ 
+    results["MPC"].append(omega_mpc)
+    results["LQR"].append(omega_lqr)
+ 
+# Metrics for MPC and LQR
+metrics = {"MPC": {"settling_time": [], "overshoot": [], "steady_state_error": [], "control_effort": []},
+           "LQR": {"settling_time": [], "overshoot": [], "steady_state_error": [], "control_effort": []}}
+ 
+def calculate_settling_time(time, response, reference, threshold=0.02):
+    settling_indices = np.where(np.abs(response - reference) > threshold * reference)[0]
+    if len(settling_indices) > 0:
+        return time[settling_indices[-1]]
+    return 0
+ 
+for i in range(len(parameter_sets)):
+    metrics["MPC"]["settling_time"].append(calculate_settling_time(time, results["MPC"][i], x_ref[0]))
+    metrics["LQR"]["settling_time"].append(calculate_settling_time(time, results["LQR"][i], x_ref[0]))
+    metrics["MPC"]["overshoot"].append((np.max(results["MPC"][i]) - x_ref[0]) / x_ref[0] * 100)
+    metrics["LQR"]["overshoot"].append((np.max(results["LQR"][i]) - x_ref[0]) / x_ref[0] * 100)
+    metrics["MPC"]["steady_state_error"].append(np.abs(results["MPC"][i][-1] - x_ref[0]))
+    metrics["LQR"]["steady_state_error"].append(np.abs(results["LQR"][i][-1] - x_ref[0]))
+    metrics["MPC"]["control_effort"].append(np.sum(np.abs(results["MPC"][i])))
+    metrics["LQR"]["control_effort"].append(np.sum(np.abs(results["LQR"][i])))
+ 
+# Define plot helper function
+def plot_metric(ax, metric, ylabel, title):
+    ax.plot(perturbation_levels * 100, metrics["MPC"][metric], '-o', label="MPC")
+    ax.plot(perturbation_levels * 100, metrics["LQR"][metric], '--o', label="LQR")
+    ax.set_title(title)
+    ax.set_xlabel("Perturbation (%)")
+    ax.set_ylabel(ylabel)
+    ax.grid()
+    ax.legend()
+ 
+# Plot metrics
+fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+plot_metric(axs[0, 0], "settling_time", "Time (s)", "Settling Time vs Perturbation")
+plot_metric(axs[0, 1], "overshoot", "Overshoot (%)", "Overshoot vs Perturbation")
+plot_metric(axs[1, 0], "steady_state_error", "Error (rad/s)", "Steady-State Error vs Perturbation")
+plot_metric(axs[1, 1], "control_effort", "Sum |u(t)|", "Control Effort vs Perturbation")
+plt.tight_layout()
+plt.show()
+ 
+ 

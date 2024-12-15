@@ -16,8 +16,8 @@ R_a = 1.0     # Armature resistance (Ohm)
 L_a = 0.001   # Armature inductance (H)
 
 # Desired Eigenvalues for Observer
-lambda_1 = -0.5
-lambda_2 = -0.8
+lambda_1 = -12
+lambda_2 = -10
 
 # Simulation Parameters
 t_start = 0.0
@@ -56,8 +56,8 @@ regulator.checkStability()
 # check controlability of the discretized system
 regulator.checkControllabilityDiscrete()
 # Define the cost matrices
-Qcoeff = [0.10,0.0]
-Rcoeff = [0.01]*num_controls
+Qcoeff = [5.13,0]
+Rcoeff = [0.02]*num_controls
 
 regulator.setCostMatrices(Qcoeff,Rcoeff)
 
@@ -92,7 +92,7 @@ print(K)
 print("Feedforward control (u_ff):")
 print(u_ff)
 
-# # Augment A matrix
+ # Augment A matrix
 # n_states = num_states
 # n_outputs = num_states
 # A_d = A
@@ -189,7 +189,7 @@ plt.figure(figsize=(12, 10))
 # Angular velocity
 plt.subplot(5, 1, 1)
 plt.plot(time, omega, label='True $\omega$ (rad/s)')
-#plt.plot(time, hat_omega, '--', label='Estimated $\hat{\omega}$ (rad/s)')
+plt.plot(time, hat_omega, '--', label='Estimated $\hat{\omega}$ (rad/s)')
 plt.title('Angular Velocity')
 plt.xlabel('Time (s)')
 plt.ylabel('Angular Velocity (rad/s)')
@@ -199,7 +199,7 @@ plt.grid(True)
 # Armature current
 plt.subplot(5, 1, 2)
 plt.plot(time, I_a, label='True $I_a$ (A)')
-#plt.plot(time, hat_I_a, '--', label='Estimated $\hat{I}_a$ (A)')
+plt.plot(time, hat_I_a, '--', label='Estimated $\hat{I}_a$ (A)')
 plt.title('Armature Current')
 plt.xlabel('Time (s)')
 plt.ylabel('Current (A)')
@@ -209,7 +209,7 @@ plt.grid(True)
 # Torque
 plt.subplot(5, 1, 3)
 plt.plot(time, T_m_true, label='True $T_m$ (N*m)')
-#plt.plot(time, T_m_estimated, '--', label='Estimated $\hat{T}_m$ (N*m)')
+plt.plot(time, T_m_estimated, '--', label='Estimated $\hat{T}_m$ (N*m)')
 plt.title('Motor Torque')
 plt.xlabel('Time (s)')
 plt.ylabel('Torque (N*m)')
@@ -219,7 +219,7 @@ plt.grid(True)
 # Terminal Voltage
 plt.subplot(5, 1, 4)
 plt.plot(time, V_terminal, label='Measured $V_{terminal}$ (V)')
-#plt.plot(time, V_terminal_hat, '--', label='Estimated $\hat{V}_{terminal}$ (V)')
+plt.plot(time, V_terminal_hat, '--', label='Estimated $\hat{V}_{terminal}$ (V)')
 plt.title('Terminal Voltage')
 plt.xlabel('Time (s)')
 plt.ylabel('Voltage (V)')
@@ -240,7 +240,7 @@ plt.show()
 settling_time_threshold = 0.02 * np.abs(x_ref[0])
 settling_indices = np.where(np.abs(omega - x_ref[0]) > settling_time_threshold)[0]
 settling_time = time[settling_indices[-1]] if len(settling_indices) > 0 else 0
-print(f"Settling Time: {settling_time:.2f} s")
+print(f"Settling Time: {settling_time:} s")
 
 overshoot = (np.max(omega) - x_ref[0]) / np.abs(x_ref[0]) * 100
 print(f"Overshoot: {overshoot:.2f} %")

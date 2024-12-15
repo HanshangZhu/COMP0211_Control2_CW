@@ -19,7 +19,7 @@ class RegulatorModel:
         self.R_bar = None
         self.Q_bar = None
         self.x_ref_bar = None  
-        self.N = N
+        self.N = N # no. of horizon
         self.q = q #  output dimension
         self.m = m #  input dimension
         self.n = n #  state dimension
@@ -30,7 +30,7 @@ class RegulatorModel:
         self.H = np.dot(self.S_bar.T, np.dot(self.Q_bar, self.S_bar)) + self.R_bar
 
         if self.x_ref_bar is not None:
-           self.F_ref = np.dot(self.S_bar.T,np.dot(self.Q_bar, self.x_ref_bar))
+           self.F_ref = np.dot(self.S_bar.T,np.dot(self.Q_bar, -self.x_ref_bar))
            self.F = np.dot(self.S_bar.T, np.dot(self.Q_bar, self.T_bar))
 
         # Compute F transpose

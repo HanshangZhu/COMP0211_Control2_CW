@@ -12,7 +12,7 @@ R_a = 1.0     # Armature resistance (Ohm)
 L_a = 0.001   # Armature inductance (H)
 
 # Desired Eigenvalues for Observer's gain
-lambda_1 = -20
+lambda_1 = -12
 lambda_2 = -10
 
 # Simulation Parameters
