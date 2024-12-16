@@ -21,7 +21,7 @@ lambda_2 = -10
 
 # Simulation Parameters
 t_start = 0.0
-t_end = 15
+t_end = 0.05
 dt = 0.00001  # Smaller time step for Euler integration
 time = np.arange(t_start, t_end, dt)
 num_steps = len(time)
