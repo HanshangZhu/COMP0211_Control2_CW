@@ -83,7 +83,7 @@ def main():
     Qcoeff_joint_vel = [100] * num_controls
     # making one vectro Qcoeff
     Qcoeff = np.hstack((Qcoeff_joint_pos, Qcoeff_joint_vel))
-    Rcoeff = [1]*num_controls
+    Rcoeff = [0.5]*num_controls
 
     regulator.setCostMatrices(Qcoeff,Rcoeff)
     # define goal position and velocity
@@ -95,13 +95,20 @@ def main():
     x_ref = np.hstack([goal_joints, desired_velocities])
     regulator.propagation_model_regulator_fixed_std(x_ref)
     
-    strict_position_tolerance = 0.1 #positional tolerance for all joints
+    strict_position_tolerance = 0.50 #positional tolerance for all joints
     B_in = {'max': np.array([1] * num_controls), 'min': np.array([-1] * num_controls)}
     B_out = {'max': np.array([1e8]*num_states), 'min': np.array([-1e8]*num_states)}
 
-    # TODO: set strict constraints
-    B_out['max'][:3] = goal_joints[:3] + strict_position_tolerance
-    B_out['min'][:3] = goal_joints[:3] - strict_position_tolerance
+    # set strict constraints on first 3 joints
+    #B_out['max'][:3] = goal_joints[:3] + strict_position_tolerance
+    #B_out['min'][:3] = goal_joints[:3] - strict_position_tolerance
+
+    # TODO: seperately change single joint constraint
+    joint_idx = 0
+    strict_position_tolerance_individual = (goal_joints[joint_idx] - init_joint[joint_idx])
+    print(f"The strict positional constraint on joint {joint_idx+1} is {strict_position_tolerance_individual} radians")
+    B_out['max'][joint_idx] = init_joint[joint_idx] + strict_position_tolerance
+    B_out['min'][joint_idx] = init_joint[joint_idx] -  strict_position_tolerance
 
     # creating constraints matrices
     regulator.setConstraintsMatrices(B_in,B_out)
@@ -165,7 +172,8 @@ def main():
     u_mpc_all = np.array(u_mpc_all)
     time_all = np.array(time_all)
     
-    # Plotting
+
+    # Plotting individual joints
     plt.figure(figsize=(12, 8))
 
     # Plot joint positions
@@ -194,6 +202,39 @@ def main():
     for i in range(num_controls):
         plt.plot(time_all, u_mpc_all[:, i], label=f'Control {i+1}')
     plt.title('Control Inputs (u_mpc)')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Control Input')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+    # Plotting
+    plt.figure(figsize=(12, 8))
+
+    # Plot joint positions
+    plt.subplot(3, 1, 1)
+    Color = ['blue','orange','red','green','yellow','purple','black']
+    #for i in range(num_joints):
+    plt.plot(time_all, q_mes_all[:, joint_idx], color=Color[joint_idx],label=f'Joint {joint_idx+1}')
+    #for i in range(num_joints):
+    plt.plot(time_all, np.ones_like(time_all)*goal_joints[joint_idx], color=Color[joint_idx],linestyle='--', label=f'Joint {joint_idx+1} Ref')
+    plt.title('Joint Position')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Position [rad]')
+    plt.legend()
+
+    # Plot joint velocities
+    plt.subplot(3, 1, 2)
+    plt.plot(time_all, qd_mes_all[:, joint_idx], label=f'Joint {joint_idx+1}')
+    plt.title(f'Joint {joint_idx +1 } Velocity')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Velocity [rad/s]')
+    plt.legend()
+
+    # Plot control inputs
+    plt.subplot(3, 1, 3)
+    plt.plot(time_all, u_mpc_all[:, joint_idx], label=f'Control {joint_idx+1}')
+    plt.title('Control Input')
     plt.xlabel('Time [s]')
     plt.ylabel('Control Input')
     plt.legend()

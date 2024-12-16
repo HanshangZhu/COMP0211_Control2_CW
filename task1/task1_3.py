@@ -5,6 +5,10 @@ from dc_model import SysDyn
 from regulator_model import RegulatorModel
 from scipy.linalg import solve_discrete_are, inv
 from numpy.linalg import matrix_rank
+import time as timer
+
+# Start the timer
+start_time = timer.time()
 
 
 # Motor Parameters
@@ -21,7 +25,7 @@ lambda_2 = -10
 
 # Simulation Parameters
 t_start = 0.0
-t_end = 15
+t_end = 0.05
 dt = 0.00001  # Smaller time step for Euler integration
 time = np.arange(t_start, t_end, dt)
 num_steps = len(time)
@@ -30,6 +34,7 @@ num_steps = len(time)
 x_init = np.array([0.0, 0.0])  # True system state [omega, I_a]
 motor_model = SysDyn(J, b, K_t, K_e, R_a, L_a,dt, x_init)
 motor_model.checkControlabilityContinuos()
+
 # Initial Conditions for the Observer [omega_hat, I_a_hat]
 x_hat_init = np.array([0.0, 0.0])  # Initial guess for the observer state [omega_hat, I_a_hat]
 observer = Observer(motor_model.A, motor_model.B, motor_model.C,dt, x_hat_init)
@@ -56,14 +61,15 @@ regulator.checkStability()
 # check controlability of the discretized system
 regulator.checkControllabilityDiscrete()
 # Define the cost matrices
-Qcoeff = [5.13,0]
-Rcoeff = [0.02]*num_controls
+Qcoeff = [200,0.0]
+Rcoeff = [0.01]*num_controls
 
 regulator.setCostMatrices(Qcoeff,Rcoeff)
 
 Q,R = regulator.getCostMatrices()
 A = regulator.getDiscreteA()
 B = regulator.getDiscreteB()
+C = np.array([[1, 0]])  # Output matrix to measure omega only
 
 # Desired state x_d
 x_ref = np.array([10,0])
@@ -74,13 +80,14 @@ P = solve_discrete_are(A, B, Q, R)
 # Calculate the optimal control law K
 K = inv(R + B.T @ P @ B) @ B.T @ P @ A
 
-# Calculate the feedforward term
-# Compute pseudoinverse of B
+
 #A_cont=motor_model.getA()
 #B_cont=motor_model.getB()
+
 B_pinv = np.linalg.pinv(B)  # Result is a (1x2) matrix
 # Compute Delta x (this is for the discrete system)
 delta_x = A @ x_ref # Result is a (2x1) vector
+
 # Compute u_ff
 u_ff = - B_pinv @ delta_x 
 
@@ -92,7 +99,7 @@ print(K)
 print("Feedforward control (u_ff):")
 print(u_ff)
 
- # Augment A matrix
+# # Augment A matrix
 # n_states = num_states
 # n_outputs = num_states
 # A_d = A
@@ -183,6 +190,15 @@ for k in range(num_steps):
     T_m_estimated[k] = K_t * hat_I_a[k]
     V_terminal_hat[k] = y_hat_cur
 
+
+# Stop the timer
+end_time = timer.time()
+
+# Calculate the total time elapsed
+elapsed_time = end_time - start_time
+print(f"Time taken to run the code: {elapsed_time:.4f} seconds")
+
+
 # Plotting the results
 plt.figure(figsize=(12, 10))
 
@@ -226,13 +242,13 @@ plt.ylabel('Voltage (V)')
 plt.legend()
 plt.grid(True)
 
-plt.subplot(5, 1, 5)
-plt.plot(time, x_i_all[:,0], label='Integral of output error $\int e_1$')
-plt.title('Integral of output error')
-plt.xlabel('Time (s)')
-plt.ylabel('Integral of output error')
-plt.legend()
-plt.grid(True)
+# plt.subplot(5, 1, 5)
+# plt.plot(time, x_i_all[:,0], label='Integral of output error $\int e_1$')
+# plt.title('Integral of output error')
+# plt.xlabel('Time (s)')
+# plt.ylabel('Integral of output error')
+# plt.legend()
+# plt.grid(True)
 
 plt.tight_layout()
 plt.show()
@@ -240,14 +256,48 @@ plt.show()
 settling_time_threshold = 0.02 * np.abs(x_ref[0])
 settling_indices = np.where(np.abs(omega - x_ref[0]) > settling_time_threshold)[0]
 settling_time = time[settling_indices[-1]] if len(settling_indices) > 0 else 0
-print(f"Settling Time: {settling_time:} s")
+print(f"Settling Time: {settling_time:.4f} s")
+
 
 overshoot = (np.max(omega) - x_ref[0]) / np.abs(x_ref[0]) * 100
-print(f"Overshoot: {overshoot:.2f} %")
+if overshoot >= 0:
+    print(f"Overshoot: {overshoot:.2f} %")
+else:
+    print(f"Undershoot: {overshoot:.2f} %")
 
 steady_state_error = np.abs(omega[-1] - x_ref[0])
 print(f"Steady-State Error: {steady_state_error:.2f}")
 
-
+# Compute the error dynamics
+error_omega = omega - hat_omega  # Error in angular velocity
+error_I_a = I_a - hat_I_a        # Error in armature current
+ 
+# Compute the eigenvalues of (A - LC)
+A_minus_LC = motor_model.A - observer.L @ motor_model.C
+eigenvalues = np.linalg.eigvals(A_minus_LC)
+print("Eigenvalues of (A - LC):", eigenvalues)
+ 
+# Plotting the error dynamics
+plt.figure(figsize=(12, 6))
+ 
+# Error in Angular Velocity
+plt.subplot(2, 1, 1)
+plt.plot(time, error_omega, label='$e_{\omega}(t)$ (Angular Velocity Error)')
+plt.title('Observer Error Dynamics')
+plt.xlabel('Time (s)')
+plt.ylabel('Error in Angular Velocity (rad/s)')
+plt.legend()
+plt.grid(True)
+ 
+# Error in Armature Current
+plt.subplot(2, 1, 2)
+plt.plot(time, error_I_a, label='$e_{I_a}(t)$ (Armature Current Error)')
+plt.xlabel('Time (s)')
+plt.ylabel('Error in Armature Current (A)')
+plt.legend()
+plt.grid(True)
+ 
+plt.tight_layout()
+plt.show()
 
         

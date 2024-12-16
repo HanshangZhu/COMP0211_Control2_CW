@@ -16,7 +16,7 @@ def init_simulator(conf_file_name):
     """Initialize simulation and dynamic model."""
     #physicsClient = p.connect(p.GUI, options="--enable-gpu")
     cur_dir = os.path.dirname(os.path.abspath(__file__)) #current difrectory
-    sim = pb.SimInterface(conf_file_name, conf_file_path_ext=cur_dir,use_gui=False) #initialize simulation as object
+    sim = pb.SimInterface(conf_file_name, conf_file_path_ext=cur_dir,use_gui=True) #initialize simulation as object
     #sim.setPhysicsEngineParameter(numThreads=6)
     init_joint_position = sim.GetInitMotorAngles()
     ext_names = np.expand_dims(np.array(sim.getNameActiveJoints()), axis=0)
@@ -30,6 +30,7 @@ def init_simulator(conf_file_name):
     # Define a goal position as a delta from the initial position
     delta_position = np.array([0.5, 0.3, -0.4, 0.2, -0.3, 0.1, 0.2])
     goal_position = init_joint_position + delta_position
+    print(goal_position)
     
     return sim, dyn_model, num_joints,init_joint_position, goal_position
 
@@ -82,7 +83,7 @@ def main():
     Qcoeff_joint_vel = [100] * num_controls
     # making one vectro Qcoeff
     Qcoeff = np.hstack((Qcoeff_joint_pos, Qcoeff_joint_vel))
-    Rcoeff = [0.5]*num_controls
+    Rcoeff = [0.001]*num_controls
 
     regulator.setCostMatrices(Qcoeff,Rcoeff)
     # define goal position and velocity
@@ -190,6 +191,8 @@ def main():
     plt.ylabel('Control Input')
     plt.legend()
 
+    stitle = f"Task2_1,Q_pos:{Qcoeff[0]},Q_vel:{Qcoeff[7]},R:{Rcoeff[0]}"
+    plt.suptitle(stitle)
     plt.tight_layout()
     plt.show()
 

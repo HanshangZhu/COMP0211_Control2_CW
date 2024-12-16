@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 from observer import Observer
 from dc_model import SysDyn
 from regulator_model import RegulatorModel
+import time as timer  # Import timer module
 
+# Start the timer
+start_time = timer.time()
 
 # Motor Parameters
 J = 0.01      # Inertia (kg*m^2)
@@ -13,8 +16,8 @@ K_e = 0.01    # Back EMF constant (V*s/rad)
 R_a = 1.0     # Armature resistance (Ohm)
 L_a = 0.001   # Armature inductance (H)
 
-# Desired Eigenvalues for Observer
-lambda_1 = -12
+# Desired Eigenvalues of (A-LC) for Observer (for computing L)
+lambda_1 = -12.0
 lambda_2 = -10
 
 # Simulation Parameters
@@ -34,28 +37,37 @@ observer = Observer(motor_model.A, motor_model.B, motor_model.C,dt, x_hat_init)
 
 # Compute the observer gain L
 # Place the eigenvalues of (A - L C) at desired locations
+# and compute the L gain that places the eigenvalues at desired positions
 observer.ComputeObserverGains(lambda_1, lambda_2)
 
-# initializing MPC
+# initializing MPC (regulator model)
 # Define the matrices
 num_states = 2
 num_controls = 1
 constraints_flag = False
 
 # Horizon length
-N_mpc = 20
+N_mpc = 10
+
 # Initialize the regulator model
 regulator = RegulatorModel(N_mpc, num_states, num_controls, num_states,constr_flag=constraints_flag)
-# define system matrices
-regulator.setSystemMatrices(dt,motor_model.getA(),motor_model.getB())
-# Define the cost matrices
 
-Qcoeff = [107,0.0]
+# define system matrices (discretise matrix A and B based on delta_t)
+regulator.setSystemMatrices(dt,motor_model.getA(),motor_model.getB())
+
+# Define the cost matrices
+Qcoeff = [200,0.0]
 Rcoeff = [0.01]*num_controls
 
+# Making up the Q and R matrice with our defined Q,Rcoeff in the matrices' diagonals.
 regulator.setCostMatrices(Qcoeff,Rcoeff)
+
+
 x_ref = np.array([10,0])
+
+# Setting up Constraints
 regulator.propagation_model_regulator_fixed_std(x_ref)
+
 B_in = {'max': np.array([100000000000000] * num_controls), 'min': np.array([-1000000000000] * num_controls)}
 B_out = {'max': np.array([100000000,1000000000]), 'min': np.array([-100000000,-1000000000])}
 # creating constraints matrices
@@ -80,8 +92,9 @@ for k in range(num_steps):
     # Time stamp
     t = time[k]
     
-    # compute control input
+    # compute optimal control input
     u_mpc = regulator.compute_solution(x_hat_cur)
+    # get the first optimal control (Armature voltage in V)
     V_a = u_mpc[0]
 
     cur_y = motor_model.step(V_a)
@@ -101,6 +114,30 @@ for k in range(num_steps):
     T_m_true[k] = K_t * I_a[k]
     T_m_estimated[k] = K_t * hat_I_a[k]
     V_terminal_hat[k] = y_hat_cur
+
+
+# Stop the timer
+end_time = timer.time()
+
+# Calculate the total time elapsed
+elapsed_time = end_time - start_time
+print(f"Time taken to run the code: {elapsed_time:.4f} seconds")
+
+
+settling_time_threshold = 0.02 * np.abs(x_ref[0])
+settling_indices = np.where(np.abs(omega - x_ref[0]) > settling_time_threshold)[0]
+settling_time = time[settling_indices[-1]] if len(settling_indices) > 0 else 0
+print(f"Settling Time: {settling_time:.4f} s")
+
+overshoot = (np.max(omega) - x_ref[0]) / np.abs(x_ref[0]) * 100
+if overshoot >= 0:
+    print(f"Overshoot: {overshoot:.2f} %")
+else:
+    print(f"Undershoot: {overshoot:.2f} %")
+
+steady_state_error = np.abs(omega[-1] - x_ref[0])
+print(f"Steady-State Error: {steady_state_error:.2f}")
+
 
 # Plotting the results
 plt.figure(figsize=(12, 10))
@@ -150,3 +187,36 @@ plt.show()
 
 
 
+        
+
+# Compute the error dynamics
+error_omega = omega - hat_omega  # Error in angular velocity
+error_I_a = I_a - hat_I_a        # Error in armature current
+ 
+# Compute the eigenvalues of (A - LC)
+A_minus_LC = motor_model.A - observer.L @ motor_model.C
+eigenvalues = np.linalg.eigvals(A_minus_LC)
+print("Eigenvalues of (A - LC):", eigenvalues)
+ 
+# Plotting the error dynamics
+plt.figure(figsize=(12, 6))
+ 
+# Error in Angular Velocity
+plt.subplot(2, 1, 1)
+plt.plot(time, error_omega, label='$e_{\omega}(t)$ (Angular Velocity Error)')
+plt.title('Observer Error Dynamics')
+plt.xlabel('Time (s)')
+plt.ylabel('Error in Angular Velocity (rad/s)')
+plt.legend()
+plt.grid(True)
+ 
+# Error in Armature Current
+plt.subplot(2, 1, 2)
+plt.plot(time, error_I_a, label='$e_{I_a}(t)$ (Armature Current Error)')
+plt.xlabel('Time (s)')
+plt.ylabel('Error in Armature Current (A)')
+plt.legend()
+plt.grid(True)
+ 
+plt.tight_layout()
+plt.show()
